@@ -8,8 +8,8 @@ This repository contains input files and other supplimentary material from [Gkey
 
 The folders in this repository correspond to the following publications:
 - **2026_NF_LTX_1x2v**: A. Maan, et al. "One dimensional gyrokinetic study of a low-recycling scrape-off layer". Submitted to NF.
-- **2026_NF_KinShielding_AUG_ITER**: S.P. Reinhoudt et al. "The impact of kinetic shielding on divertor impurity
-transport in ASDEX Upgrade and ITER". Paper yet to be written
+- **2026_NF_KinShielding_AUG_ITER**: S. P. Reinhoudt, "The impact of kinetic shielding on divertor impurity
+transport in ASDEX Upgrade and ITER". (Master Thesis). https://research.tue.nl/en/studentTheses/the-impact-of-kinetic-shielding-on-divertor-impurity-transport-in/.
 - **2026_PRX_tcv_miller_scan**: A. C. D. Hoffmann, M. Francisquez, T. N. Bernard, G. W. Hammett, A. Hakim. "High-throughput full-f gyrokinetics of the tokamak boundary". Submitted to PRX.
 - **2026_PRE_hts_mirror_equilibria**: M. Rosen, M. Francisquez, A. Hakim, G. W. Hammett. "Gyrokinetic equilibria of high temperature superconducting magnetic mirrors". Submitted to PRE.
 - **2026_PoP_Skolar_Invited**: C. R. Skolar and B. Srinivasan, "Effects of parallel magnetic fields on sheaths near biased electrodes in a highly collisional Z-pinch plasma". Submitted to Physics of Plasmas.
