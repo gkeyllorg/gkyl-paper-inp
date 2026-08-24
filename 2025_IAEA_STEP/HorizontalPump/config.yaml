@@ -1,0 +1,55 @@
+# Configuration file for Gkeyll-Eirene Coupling Scripts
+# Use this file to configure paths and parameters for PrepGkeyllData.py and PrepEireneData.py
+
+# ============================================================================
+# DATA PATHS (absolute paths)
+# ============================================================================
+paths:
+  # Project Roots
+  lib_path : '/pscratch/sd/a/akshukla/GK-Neutral_coupling/'
+  # Gkeyll simulation data
+  gkeyll_data_path: '/pscratch/sd/a/akshukla/HorizontalPump/'
+  gkeyll_simulation_name: 'hstep27'
+  
+  # Eirene data paths
+  eirene_data_path: '/pscratch/sd/a/akshukla/HorizontalPump/step_full_device_D+D2_walled_off/gkeyll_w_2D2/'
+  b2_data_path: '/pscratch/sd/a/akshukla/HorizontalPump/step_full_device_D+D2_walled_off/baserun/'
+  
+  # Coordinate mapping (must be pre-computed)
+  coordinate_mapping_path: '/pscratch/sd/a/akshukla/HorizontalPump/python_data/hstep27_geodata/'
+  
+  # Input/Output paths for text files
+  gkeyll_text_output_path: '/pscratch/sd/a/akshukla/HorizontalPump/gkeyll_text_output/'
+  gkeyll_text_input_path: '/pscratch/sd/a/akshukla/HorizontalPump/gkeyll_text_input/'
+
+# ============================================================================
+# GKEYLL OPTIONS
+# ============================================================================
+gkeyll_options:
+  # Domain configuration
+  half_domain: true              # Run with half-domain (true) or full-domain (false)
+  bmin: 0                        # Min block number
+  bmax: 8                        # Max block number
+  
+  # Physics parameters
+  diffusivity: 0.5               # Diffusivity parameter
+  
+  # Species configuration
+  extra_species:
+  
+  # Reflection options
+  fast_reflection: false          # Enable fast reflection coefficient calculation
+  final_plate_rec_coeff: 0.99       # Copper recombination coefficient
+  final_wall_rec_coeff: 0.99     # Lithium recycling coefficient
+  wall_material: "Cu"
+  plate_material: "Cu"
+
+# ============================================================================
+# NOTES
+# ============================================================================
+# - The coordinate_mapping_path must contain pre-computed .npy files:
+#   * gkeyll_b2_coordmapping.npy
+#   * gkeyll_b2_coordmapping_radialfaces.npy
+#   * gkeyll_b2_coordmapping_parallelfaces.npy
+# - gkeyll_text_output_path must contain 'new_data_flag' file with frame number
+# - For full-domain runs, set half_domain to false (currently not implemented)

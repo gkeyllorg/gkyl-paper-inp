@@ -1,0 +1,35 @@
+block type, psi, bratio : 17, 1.50931, 0.301746
+block type, psi, bratio : 17, 1.53431, 0.297211
+block type, psi, bratio : 17, 1.55931, 0.292741
+block type, psi, bratio : 17, 1.50931, 0.301746
+block type, psi, bratio : 17, 1.53431, 0.297211
+block type, psi, bratio : 17, 1.55931, 0.292741
+block type, psi, bratio : 5, 1.40931, 0.320432
+block type, psi, bratio : 5, 1.43431, 0.315688
+block type, psi, bratio : 5, 1.45931, 0.310991
+block type, psi, bratio : 5, 1.48431, 0.306341
+block type, psi, bratio : 5, 1.50931, 0.301746
+block type, psi, bratio : 5, 1.40931, 0.320432
+block type, psi, bratio : 5, 1.43431, 0.315688
+block type, psi, bratio : 5, 1.45931, 0.310991
+block type, psi, bratio : 5, 1.48431, 0.306341
+block type, psi, bratio : 5, 1.50931, 0.301746
+block type, psi, bratio : 14, 1.50931, 0.0301107
+block type, psi, bratio : 14, 1.53431, 0.0269805
+block type, psi, bratio : 14, 1.55931, 0.0260933
+block type, psi, bratio : 14, 1.50931, 0.0301107
+block type, psi, bratio : 14, 1.53431, 0.0269805
+block type, psi, bratio : 14, 1.55931, 0.0260933
+block type, psi, bratio : 10, 1.45931, 0.0396265
+block type, psi, bratio : 10, 1.48431, 0.0346634
+block type, psi, bratio : 10, 1.50931, 0.0301107
+block type, psi, bratio : 10, 1.45931, 0.0396265
+block type, psi, bratio : 10, 1.48431, 0.0346634
+block type, psi, bratio : 10, 1.50931, 0.0301107
+
+5 is out_lo
+10 is in_up
+14 is pf_up_l
+17 is pf_lo_r
+
+

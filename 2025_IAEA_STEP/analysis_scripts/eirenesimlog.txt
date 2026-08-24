@@ -1,0 +1,47 @@
+So now it is 5/17 and we have figured some things out:
+   - Reaction 11 throws underflow/Nans and junks up eirene data. must exclude (and it is justified)
+   - We cannot include the D2+ species fully correctly. Eirene will always dissociate all of them.
+     So we are removing the D2+ species from gkeyll
+   - We need to run without fast reflection and we need to run without t1he fake species 
+   - I am using a new geometyr with better res at the plate 
+   - I am correcting the boundary fluxes in the GK-Neutral coupling repo so we don't overestimate pflux so much
+   - I want to do 3 sims all with the vertical pump:
+      - All Cu
+      - Li Walls
+      - All Li
+hrdivertor4:
+   - Base case plasma only with compressed divertor and no molecules. Runs 21 frames (0.21 ms) in 4 hours 
+     without reactions
+   - Starting with copper walls and plate from frame 55
+   - Switched to corrected parallel flux and diffusion at frame 290
+   - I think I fucked up the bflux correction somehow, let's just run with diffusion fix from 290.  Use M1 for bflux
+
+LiWallFix:
+   - Starts from hrdivertor4 frame 80 with lithium walls
+   - copper plate, li walls
+   - Switched to corrected parallel flux and diffusion at frame 220
+   - I think I fucked up the bflux correction somehow, let's just run with diffusion fix from 220.  Use M1 for bflux
+
+LiPlateFix:
+   - Starts from hrdivertor4 frame 165
+   - li plate, li walls, no pump
+   - Switched to corrected parallel flux and diffusion at frame 270
+   - something went wrong and it crashed at frame 305. Restart from 295
+   - I think I fucked up the bflux correction somehow, let's just run with diffusion fix from 270.  Use M1 for bflux
+
+
+HorizontalPump:
+   - Starts from hrdivertor4 frame 165
+   - all copper, horizontal pump
+   - Switched to corrected parallel flux and diffusion at frame 285
+   - I think I fucked up the bflux correction somehow, let's just run with diffusion fix from 285. Use M1 for bflux
+
+CuWallNewDiffFix:
+   - This one doesn't have any neutrals or anything yet I'm just testing conservation
+   - The others are behacing a bit weird so I'm gonna run this one with all copper using gkapp-main4 which has the diff fix
+   - start from 45
+
+
+
+
+
