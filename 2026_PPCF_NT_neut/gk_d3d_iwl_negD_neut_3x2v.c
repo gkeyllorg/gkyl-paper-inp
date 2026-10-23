@@ -1,4 +1,3 @@
-// Restart from 1.1ms
 #include <math.h>
 #include <stdio.h>
 #include <time.h>
@@ -21,10 +20,11 @@ struct gk_app_ctx {
     double me, qe, mi, qi, n0, Te0, Ti0;
     double rec_frac;
     double D0_gamma;
+    double alpha_neut;
     // Collision parameters
     double nu_frac;
     // Source parameters
-    double num_sources;
+    int num_sources;
     bool adapt_energy_srcCORE, adapt_particle_srcCORE; 
     double center_srcCORE[3], sigma_srcCORE[3];
     double energy_srcCORE, particle_srcCORE;
@@ -57,7 +57,7 @@ double qprofile(double R) {
   double a[] = {154.51071835546747,  -921.8584472748003, 1842.1077075366113, -1231.619813170522};
 
   // Evaluate cubic polynomial: a0*R^3 + a1*R^2 + a2*R + a3
-  return ((a[0] * R + a[1]) * R + a[2]) * R + a[3]; 
+  return ((a[0] * R + a[1]) * R + a[2]) * R + a[3];  // Horner’s method (fast & stable)
 
 }
 
@@ -136,10 +136,9 @@ double dPsidr(double r, double theta, void *ctx)
   integral = gkyl_dbl_exp(integrand, &tmp_ctx, 0., 2.*M_PI, 7, 1e-10);
 
   double B0 = app->B0;
-  double a_mid = app->a_mid;
-  double R_axis = app->R_axis;
+  double R0 = app->R0;
   double R = R_rtheta(r,0.0,ctx);
-  return ( B0*R_axis/(2.*M_PI*qprofile(R)))*integral.res;
+  return ( B0*R0/(2.*M_PI*qprofile(R)))*integral.res;
 }
 
 double alpha(double r, double theta, double phi, void *ctx)
@@ -159,9 +158,9 @@ double alpha(double r, double theta, double phi, void *ctx)
   }
 
   double B0 = app->B0;
-  double R_axis = app->R_axis;
+  double R0 = app->R0;
 
-  return phi - B0*R_axis*integral.res/dPsidr(r,theta,ctx);
+  return phi - B0*R0*integral.res/dPsidr(r,theta,ctx);
 }
 
 double Bphi(double R, void *ctx)
@@ -190,6 +189,7 @@ void density_init(double t, const double * GKYL_RESTRICT xn, double* GKYL_RESTRI
   struct gk_app_ctx *app = ctx;
 
   // fit from experimental data in Python
+  // a=-8.8e+18, b=34, c=0.093, d=1.1e+19
   double a = -8.8e18;
   double b = 34; 
   double c = 0.093; 
@@ -233,19 +233,21 @@ void neut_density_init(double t, const double* GKYL_RESTRICT xn, double* GKYL_RE
 {
   struct gk_app_ctx *app = ctx;
   double x = xn[0], z = xn[2];
-  double alpha_neut = 0.01*app->n0;
+  double alpha_neut = app->alpha_neut;
   double Lz = app->Lz;
   double x_LCFS = app->x_LCFS;
+  double l_rad = 0.05;
+  double l_pol = 1.0;
   double n = 0.0;
 
   //Set number density.
   if (z <= 0) {
-    n = alpha_neut*(-tanh((x_LCFS-x)/0.05)+1)*(pow(1.0/cosh(-(Lz/2. + z)/0.5),2.0) + 1.e-6);
+    n = alpha_neut*(-tanh((x_LCFS-x)/l_rad)+1)*(pow(1.0/cosh(-(Lz/2. + z)/l_pol),2.0) + 1.e-6); //*(-tanh((0.12-x)/0.02)+1);
   }
   else {
-    n = 2.0*alpha_neut*(-tanh((x_LCFS-x)/0.05)+1)*(pow(1.0/cosh((-Lz/2. + z)/0.5),2.0) + 1.e-6);
+    n = 2.0*alpha_neut*(-tanh((x_LCFS-x)/l_rad)+1)*(pow(1.0/cosh((-Lz/2. + z)/l_pol),2.0) + 1.e-6); //*(-tanh((0.12-x)/0.02)+1);
   }
-  fout[0] = n; 
+  fout[0] = n;
 }
 void temp_neut(double t, const double * GKYL_RESTRICT xn, double* GKYL_RESTRICT fout, void *ctx)
 {
@@ -405,14 +407,14 @@ struct gk_app_ctx create_ctx(void)
 {
   int cdim = 3, vdim = 2; // Dimensionality.
   // Universal constant parameters.
-  double eV = GKYL_ELEMENTARY_CHARGE;
+  double eps0 = GKYL_EPSILON0, eV = GKYL_ELEMENTARY_CHARGE;
   double mp = GKYL_PROTON_MASS, me = GKYL_ELECTRON_MASS;
   double qi = eV; // ion charge
   double qe = -eV; // electron charge
 
   // Geometry and magnetic field.
   double a_shift   = 1.0;                // Parameter in Shafranov shift.
-  double Z_axis    = -0.0014645315;      // Magnetic axis height [m].
+  double Z_axis    = 0.0;                // Magnetic axis height [m].
   double R_axis    = 1.7074685;          // Magnetic axis major radius [m].
   double B_axis    = 2.0;                // Magnetic field at the magnetic axis [T].
   double R_LCFSmid = 2.17;               // Major radius of the LCFS at the outboard midplane [m].
@@ -442,6 +444,7 @@ struct gk_app_ctx create_ctx(void)
   double c_s = sqrt(Te0/mi);
   double omega_ci = fabs(qi*B0/mi);
   double rho_s = c_s/omega_ci;
+  double alpha_neut = 0.01*n0; // Neutral density scale factor, used to scale the neutral density.
   double rec_frac = 0.98; // Recycling coefficient.
   double D0_gamma = 5.0/3.0; // Adiabatic index.
 
@@ -453,9 +456,6 @@ struct gk_app_ctx create_ctx(void)
   double q0        = qprofile(R0);  // Safety factor in the center of domain.
 
   double Ly        = 150*rho_s;           // Domain size along y.
-  // Adjust the domain size along y to have integer toroidal mode number.
-  // We need: 2*pi*Cy/Ly = integer (Cy = r0/q0)
-  // Ly = 2.*M_PI*r0/q0/round(2.*M_PI*r0/q0/Ly); 
   double y_min     = -Ly/2.;
   double y_max     =  Ly/2.;
 
@@ -469,21 +469,21 @@ struct gk_app_ctx create_ctx(void)
   double nu_frac = 0.5;
 
   // Source parameters
-  double num_sources = 1;
+  int num_sources = 1;
   // Core source:
   // - Injects energy only in the core region (0.75MW per species).
   // - The particles injection is only the one that are lost through the inner radial boundary.
   bool adapt_energy_srcCORE = true; // The source will compensate the losses in energy according to given boundaries.
   bool adapt_particle_srcCORE = true; // The source will compensate the losses in particle according to given boundaries.
   double sim_to_exp_ratio = 1/ntoroidal; // Ratio between the simulation and the experiment, used to scale the source.
-  double energy_srcCORE = sim_to_exp_ratio*.75e6; // What the source must inject in energy [W]
+  double energy_srcCORE = sim_to_exp_ratio*1.5e6/2.0; // What the source must inject in energy [W]
   double particle_srcCORE = 0.0;// What the source must inject in particle [1/s]
   double center_srcCORE[3] = {x_min, 3*rho_s, -Lz/4}; // This is the position of the ion source,
   double sigma_srcCORE[3] = {0.03*Lx, 0.0, Lz/6}; //  the electron source will be at +Lz/2.
   double floor_srcCORE = 1e-10;
 
-  // Grid parameters
-  int num_cell_x = 60; // The LCFS is positionned at 1/3 of the domain -> the resolution must be divisible by 3.
+  // Grid parameters. Change to 48x36x16 for low res case.
+  int num_cell_x = 60; // The LCFS is positioned at 1/3 of the domain -> the resolution must be divisible by 3.
   int num_cell_y = 60;
   int num_cell_z = 16;
   int num_cell_vpar = 12;
@@ -496,7 +496,7 @@ struct gk_app_ctx create_ctx(void)
   double mu_max_ion   = 1.*mi*pow(4*vti,2)/(2*B0);
   double final_time = 0.5e-3;
   int num_frames = 500;
-  double write_phase_freq = 1.0;
+  double write_phase_freq = 0.1;
   int int_diag_calc_num = num_frames*100;
   double dt_failure_tol = 1.0e-3; // Minimum allowable fraction of initial time-step.
   int num_failures_max = 20; // Maximum allowable number of consecutive small time-steps.
@@ -506,6 +506,7 @@ struct gk_app_ctx create_ctx(void)
     .vdim = vdim,
     .a_shift = a_shift,
     .R_axis = R_axis,
+    .Z_axis = Z_axis,
     .R0     = R0    ,
     .a_mid  = a_mid ,
     .x_inner = x_inner,
@@ -527,6 +528,7 @@ struct gk_app_ctx create_ctx(void)
     .n0 = n0,  .Te0 = Te0,  .Ti0 = Ti0,
     .D0_gamma = D0_gamma,
     .rec_frac = rec_frac,
+    .alpha_neut = alpha_neut,
     .nu_frac = nu_frac,
     .num_sources = num_sources,
     .adapt_energy_srcCORE = adapt_energy_srcCORE,
@@ -535,12 +537,6 @@ struct gk_app_ctx create_ctx(void)
     .sigma_srcCORE = {sigma_srcCORE[0], sigma_srcCORE[1], sigma_srcCORE[2]},
     .energy_srcCORE = energy_srcCORE,  .particle_srcCORE = particle_srcCORE,
     .floor_srcCORE = floor_srcCORE,
-    .adapt_energy_srcRECY = adapt_energy_srcRECY,
-    .adapt_particle_srcRECY = adapt_particle_srcRECY,
-    .center_srcRECY = {center_srcRECY[0], center_srcRECY[1], center_srcRECY[2]},
-    .sigma_srcRECY = {sigma_srcRECY[0], sigma_srcRECY[1], sigma_srcRECY[2]},
-    .energy_srcRECY = energy_srcRECY,  .particle_srcRECY = particle_srcRECY,
-    .floor_srcRECY = floor_srcRECY,
     .num_cell_x     = num_cell_x,
     .num_cell_y     = num_cell_y,
     .num_cell_z     = num_cell_z,
@@ -620,7 +616,7 @@ main(int argc, char **argv)
       .ctx = &ctx,
     },
 
-    // Uncomment to initialize from a restart file. Make sure to set the correct file names.
+    // Uncomment to initialize from a restart file, for changing resolution. 
     // .init_from_file = {
     //   .type = GKYL_IC_IMPORT_F,
     //   .file_name = "elc_restart.gkyl",
@@ -639,6 +635,7 @@ main(int argc, char **argv)
 
     .collisionless = {
       .type = GKYL_GK_COLLISIONLESS_ES,
+      .write_diagnostics = true,
     },
 
     .collisions =  {
@@ -648,6 +645,7 @@ main(int argc, char **argv)
       .den_ref = ctx.n0,
       .temp_ref = ctx.Te0,
       .nu_frac = ctx.nu_frac, 
+      .write_diagnostics = true,
     },
 
     .react_neut = {
@@ -697,14 +695,19 @@ main(int argc, char **argv)
       { .dir = 2, .edge = GKYL_LOWER_EDGE, .type = GKYL_BC_GK_SPECIES_IWL, .aux_profile = bc_shift_func_lo, .aux_ctx = &ctx },
       { .dir = 2, .edge = GKYL_UPPER_EDGE, .type = GKYL_BC_GK_SPECIES_IWL, .aux_profile = bc_shift_func_up, .aux_ctx = &ctx },
     },
-    .num_diag_moments = 9,
-    .diag_moments = {GKYL_F_MOMENT_HAMILTONIAN, GKYL_F_MOMENT_BIMAXWELLIAN, 
-      GKYL_F_MOMENT_M0, GKYL_F_MOMENT_M1, GKYL_F_MOMENT_M2PAR, GKYL_F_MOMENT_M2PERP, 
-      GKYL_F_MOMENT_M2, GKYL_F_MOMENT_M3PAR, GKYL_F_MOMENT_M3PERP},
+    .num_diag_moments = 4,
+    .diag_moments = {
+      GKYL_F_MOMENT_BIMAXWELLIAN,
+      GKYL_F_MOMENT_M0M1M2PARM2PERP,
+      GKYL_F_MOMENT_M3PAR,
+      GKYL_F_MOMENT_M3PERP,
+    },
     .num_integrated_diag_moments = 1,
     .integrated_diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
     .time_rate_diagnostics = true,
     .boundary_flux_diagnostics = {
+      .num_diag_moments = 1,
+      .diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
       .num_integrated_diag_moments = 1,
       .integrated_diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
     },
@@ -745,7 +748,7 @@ main(int argc, char **argv)
       .ctx = &ctx,
     },
 
-    // Uncomment to initialize from a restart file. Make sure to set the correct file names.
+    // Uncomment to initialize from a restart file, for changing resolution. 
     // .init_from_file = {
     //   .type = GKYL_IC_IMPORT_F,
     //   .file_name = "ion_restart.gkyl",
@@ -764,6 +767,7 @@ main(int argc, char **argv)
 
     .collisionless = {
       .type = GKYL_GK_COLLISIONLESS_ES,
+      .write_diagnostics = true,
     },
 
     .collisions =  {
@@ -773,6 +777,7 @@ main(int argc, char **argv)
       .den_ref = ctx.n0,
       .temp_ref = ctx.Ti0, 
       .nu_frac = ctx.nu_frac,
+      .write_diagnostics = true,
     },
 
     .react_neut = {
@@ -829,14 +834,19 @@ main(int argc, char **argv)
       { .dir = 2, .edge = GKYL_LOWER_EDGE, .type = GKYL_BC_GK_SPECIES_IWL, .aux_profile = bc_shift_func_lo, .aux_ctx = &ctx },
       { .dir = 2, .edge = GKYL_UPPER_EDGE, .type = GKYL_BC_GK_SPECIES_IWL, .aux_profile = bc_shift_func_up, .aux_ctx = &ctx },
     },
-    .num_diag_moments = 9,
-    .diag_moments = {GKYL_F_MOMENT_HAMILTONIAN, GKYL_F_MOMENT_BIMAXWELLIAN, 
-      GKYL_F_MOMENT_M0, GKYL_F_MOMENT_M1, GKYL_F_MOMENT_M2PAR, GKYL_F_MOMENT_M2PERP, 
-      GKYL_F_MOMENT_M2, GKYL_F_MOMENT_M3PAR, GKYL_F_MOMENT_M3PERP},
+    .num_diag_moments = 4,
+    .diag_moments = {
+      GKYL_F_MOMENT_BIMAXWELLIAN,
+      GKYL_F_MOMENT_M0M1M2PARM2PERP,
+      GKYL_F_MOMENT_M3PAR,
+      GKYL_F_MOMENT_M3PERP,
+    },
     .num_integrated_diag_moments = 1,
     .integrated_diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
     .time_rate_diagnostics = true,
     .boundary_flux_diagnostics = {
+      .num_diag_moments = 1,
+      .diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
       .num_integrated_diag_moments = 1,
       .integrated_diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
     },
@@ -863,9 +873,9 @@ main(int argc, char **argv)
       .impacting_ion_id = GKYL_ION_H,
       .electron_name = "elc",
       .recycling_coeff = ctx.rec_frac,
-      .num_boundaries = 2,
-      .boundaries_dir = {2, 2,},
-      .boundaries_edge = {GKYL_LOWER_EDGE, GKYL_UPPER_EDGE,},
+      .num_boundaries = 3,
+      .boundaries_dir = {0, 2, 2,},
+      .boundaries_edge = {GKYL_UPPER_EDGE, GKYL_LOWER_EDGE, GKYL_UPPER_EDGE,},
     }
   };
 
@@ -913,7 +923,7 @@ main(int argc, char **argv)
 
   // GK app
   struct gkyl_gk app_inp = {
-    .name = "gk_d3d_iwl_adapt_source_3x2v_p1",
+    .name = "gk_d3d_iwl_negD_neut_3x2v",
     .cfl_frac_omegaH = 2.0,
     .cfl_frac = 1.0,
     .cdim = ctx.cdim,

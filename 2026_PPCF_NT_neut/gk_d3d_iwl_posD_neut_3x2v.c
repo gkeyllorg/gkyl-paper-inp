@@ -23,7 +23,8 @@ struct gk_app_ctx {
     // Collision parameters
     double nu_frac;
     // Source parameters
-    double num_sources;
+    double alpha_neut; // Neutral density scale factor
+    int num_sources;
     bool adapt_energy_srcCORE, adapt_particle_srcCORE; 
     double center_srcCORE[3], sigma_srcCORE[3];
     double energy_srcCORE, particle_srcCORE;
@@ -35,7 +36,6 @@ struct gk_app_ctx {
     int cells[GKYL_MAX_DIM], poly_order;
     double vpar_max_elc, mu_max_elc, vpar_max_ion, mu_max_ion;
     double vx_max; double vy_max; double vz_max;
-    int Nvx; int Nvy; int Nvz; 
     // Simulation control parameters
     double final_time, write_phase_freq;
     int num_frames, int_diag_calc_num, num_failures_max;
@@ -135,10 +135,9 @@ double dPsidr(double r, double theta, void *ctx)
   integral = gkyl_dbl_exp(integrand, &tmp_ctx, 0., 2.*M_PI, 7, 1e-10);
 
   double B0 = app->B0;
-  double a_mid = app->a_mid;
-  double R_axis = app->R_axis;
+  double R0 = app->R0;
   double R = R_rtheta(r,0.0,ctx);
-  return ( B0*R_axis/(2.*M_PI*qprofile(R)))*integral.res;
+  return ( B0*R0/(2.*M_PI*qprofile(R)))*integral.res;
 }
 
 double alpha(double r, double theta, double phi, void *ctx)
@@ -158,9 +157,9 @@ double alpha(double r, double theta, double phi, void *ctx)
   }
 
   double B0 = app->B0;
-  double R_axis = app->R_axis;
+  double R0 = app->R0;
 
-  return phi - B0*R_axis*integral.res/dPsidr(r,theta,ctx);
+  return phi - B0*R0*integral.res/dPsidr(r,theta,ctx);
 }
 
 double Bphi(double R, void *ctx)
@@ -232,7 +231,7 @@ void neut_density_init(double t, const double* GKYL_RESTRICT xn, double* GKYL_RE
 {
   struct gk_app_ctx *app = ctx;
   double x = xn[0], z = xn[2];
-  double alpha_neut = 0.01*app->n0;
+  double alpha_neut = app->alpha_neut;
   double Lz = app->Lz;
   double x_LCFS = app->x_LCFS;
   double l_rad = 0.05;
@@ -241,10 +240,10 @@ void neut_density_init(double t, const double* GKYL_RESTRICT xn, double* GKYL_RE
 
   //Set number density.
   if (z <= 0) {
-    n = alpha_neut*(-tanh((x_LCFS-x)/l_rad)+1)*(pow(1.0/cosh(-(Lz/2. + z)/l_pol),2.0) + 1.e-6);
+    n = alpha_neut*(-tanh((x_LCFS-x)/l_rad)+1)*(pow(1.0/cosh(-(Lz/2. + z)/l_pol),2.0) + 1.e-6); //*(-tanh((0.12-x)/0.02)+1);
   }
   else {
-    n = 2.0*alpha_neut*(-tanh((x_LCFS-x)/l_rad)+1)*(pow(1.0/cosh((-Lz/2. + z)/l_pol),2.0) + 1.e-6);
+    n = 2.0*alpha_neut*(-tanh((x_LCFS-x)/l_rad)+1)*(pow(1.0/cosh((-Lz/2. + z)/l_pol),2.0) + 1.e-6); //*(-tanh((0.12-x)/0.02)+1);
   }
   fout[0] = n;
 }
@@ -413,7 +412,7 @@ struct gk_app_ctx create_ctx(void)
 
   // Geometry and magnetic field.
   double a_shift   = 0.5;                // Parameter in Shafranov shift.
-  double Z_axis    = 0.013055028;        // Magnetic axis height [m].
+  double Z_axis    = 0.0;                // Magnetic axis height [m].
   double R_axis    = 1.6486461;          // Magnetic axis major radius [m].
   double B_axis    = 2.0;                // Magnetic field at the magnetic axis [T].
   double R_LCFSmid = 2.17;               // Major radius of the LCFS at the outboard midpl
@@ -444,6 +443,7 @@ struct gk_app_ctx create_ctx(void)
   double c_s = sqrt(Te0/mi);
   double omega_ci = fabs(qi*B0/mi);
   double rho_s = c_s/omega_ci;
+  double alpha_neut = 0.01*n0; // Neutral density scale factor, used to scale the neutral density.
   double rec_frac = 0.98; // Recycling coefficient.
   double D0_gamma = 5.0/3.0; // Adiabatic index.
 
@@ -471,14 +471,14 @@ struct gk_app_ctx create_ctx(void)
   double nu_frac = 0.5;
 
   // Source parameters
-  double num_sources = 1;
+  int num_sources = 1;
   // Core source:
-  // - Injects energy only in the core region (0.25MW per species).
+  // - Injects energy only in the core region (0.75MW per species).
   // - The particles injection is only the one that are lost through the inner radial boundary.
   bool adapt_energy_srcCORE = true; // The source will compensate the losses in energy according to given boundaries.
   bool adapt_particle_srcCORE = true; // The source will compensate the losses in particle according to given boundaries.
   double sim_to_exp_ratio = 1/ntoroidal; // Ratio between the simulation and the experiment, used to scale the source.
-  double energy_srcCORE = sim_to_exp_ratio*.75e6; // What the source must inject in energy [W]
+  double energy_srcCORE = sim_to_exp_ratio*1.5e6/2.0; // What the source must inject in energy [W]
   double particle_srcCORE = 0.0;// What the source must inject in particle [1/s]
   double center_srcCORE[3] = {x_min, 3*rho_s, -Lz/4}; // This is the position of the ion source,
   double sigma_srcCORE[3] = {0.03*Lx, 0.0, Lz/6}; //  the electron source will be at +Lz/2.
@@ -496,16 +496,13 @@ struct gk_app_ctx create_ctx(void)
   double mu_max_elc   = 1.*me*pow(4*vte,2)/(2*B0);
   double vpar_max_ion = 5.*vti;
   double mu_max_ion   = 1.*mi*pow(4*vti,2)/(2*B0);
-  double final_time = 0.5e-3;
   double vx_max = 5*vtn;
   double vy_max = 5*vtn;
   double vz_max = 5*vtn;
-  double Nvx = 6;
-  double Nvy = 6;
-  double Nvz = 6;
 
+  double final_time = 0.5e-3;
   int num_frames = 500;
-  double write_phase_freq = 1;
+  double write_phase_freq = 0.1;
   int int_diag_calc_num = num_frames*100;
   double dt_failure_tol = 2.0e-3; // Minimum allowable fraction of initial time-step.
   int num_failures_max = 20; // Maximum allowable number of consecutive small time-steps.
@@ -515,6 +512,7 @@ struct gk_app_ctx create_ctx(void)
     .vdim = vdim,
     .a_shift = a_shift,
     .R_axis = R_axis,
+    .Z_axis = Z_axis,
     .R0     = R0    ,
     .a_mid  = a_mid ,
     .x_inner = x_inner,
@@ -536,6 +534,7 @@ struct gk_app_ctx create_ctx(void)
     .n0 = n0,  .Te0 = Te0,  .Ti0 = Ti0, .T0 = T0,
     .rec_frac = rec_frac,
     .D0_gamma = D0_gamma,
+    .alpha_neut = alpha_neut,
     .nu_frac = nu_frac,  
     .num_sources = num_sources,
     .adapt_energy_srcCORE = adapt_energy_srcCORE,
@@ -554,7 +553,6 @@ struct gk_app_ctx create_ctx(void)
     .vpar_max_elc = vpar_max_elc,  .mu_max_elc = mu_max_elc,
     .vpar_max_ion = vpar_max_ion,  .mu_max_ion = mu_max_ion,
     .vx_max = vx_max,  .vy_max = vy_max,  .vz_max = vz_max,
-    .Nvx = Nvx,  .Nvy = Nvy,  .Nvz = Nvz,
     .write_phase_freq = write_phase_freq,
     .final_time = final_time,  .num_frames = num_frames,
     .int_diag_calc_num = int_diag_calc_num,
@@ -620,11 +618,12 @@ main(int argc, char **argv)
     .cells = { cells_v[0], cells_v[1] },
     .polarization_density = ctx.n0,
 
-    .init_from_file = {
-      .type = GKYL_IC_IMPORT_F,
-      .file_name = "elc_restart_f200.gkyl",
-      .jacobtot_inv_file_name = "restart_jacobtot_inv.gkyl",
-    },
+    // Uncomment to initialize from a restart file, for changing resolution. 
+    // .init_from_file = {
+    //   .type = GKYL_IC_IMPORT_F,
+    //   .file_name = "elc_restart.gkyl",
+    //   .jacobtot_inv_file_name = "restart_jacobtot_inv.gkyl",
+    // },
 
     .mapc2p = {
       .mapping = mapc2p_vel_elc,
@@ -643,6 +642,7 @@ main(int argc, char **argv)
 
     .collisionless = {
       .type = GKYL_GK_COLLISIONLESS_ES,
+      .write_diagnostics = true,
     },
 
     .collisions =  {
@@ -651,7 +651,8 @@ main(int argc, char **argv)
       .collide_with = { "ion" },
       .den_ref = ctx.n0,
       .temp_ref = ctx.Te0,
-      .nu_frac = ctx.nu_frac, 
+      .nu_frac = ctx.nu_frac,
+      .write_diagnostics = true, 
     },
 
     .react_neut = {
@@ -709,6 +710,8 @@ main(int argc, char **argv)
     .integrated_diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
     .time_rate_diagnostics = true,
     .boundary_flux_diagnostics = {
+      .num_diag_moments = 1,
+      .diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
       .num_integrated_diag_moments = 1,
       .integrated_diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
     },
@@ -734,6 +737,7 @@ main(int argc, char **argv)
     .edge = {GKYL_LOWER_EDGE},
   };
 
+
   // ions
   struct gkyl_gyrokinetic_species ion = {
     .name = "ion",
@@ -749,15 +753,16 @@ main(int argc, char **argv)
       .ctx = &ctx,
     },
 
-    // Uncomment to restart from a previous run.
+    // Uncomment to initialize from a restart file, for changing resolution. 
     // .init_from_file = {
     //   .type = GKYL_IC_IMPORT_F,
-    //   .file_name = "ion_restart.gkyl",
+    //   .file_name = "ion_restart_2ms.gkyl",
     //   .jacobtot_inv_file_name = "restart_jacobtot_inv.gkyl",
     // },
     
     .collisionless = {
       .type = GKYL_GK_COLLISIONLESS_ES,
+      .write_diagnostics = true,
     },
 
     .collisions =  {
@@ -767,6 +772,7 @@ main(int argc, char **argv)
       .den_ref = ctx.n0,
       .temp_ref = ctx.Ti0, 
       .nu_frac = ctx.nu_frac,
+      .write_diagnostics = true,
     },
 
     .projection = {
@@ -841,6 +847,8 @@ main(int argc, char **argv)
     .integrated_diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
     .time_rate_diagnostics = true,
     .boundary_flux_diagnostics = {
+      .num_diag_moments = 1,
+      .diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
       .num_integrated_diag_moments = 1,
       .integrated_diag_moments = { GKYL_F_MOMENT_HAMILTONIAN },
     },
@@ -917,7 +925,7 @@ main(int argc, char **argv)
 
   // GK app
   struct gkyl_gk app_inp = {
-    .name = "gk_d3d_iwl_adapt_source_3x2v_p1",
+    .name = "gk_d3d_iwl_posD_neut_3x2v",
     .cfl_frac_omegaH = 2.0,
     .cfl_frac = 1.0,
     .cdim = ctx.cdim,
